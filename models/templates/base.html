@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Smart Manhole Safety System | Prototype{% endblock %}</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/incident_report.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Top Fixed Navigation Bar -->
+    <header class="top-header">
+        <div class="brand-section">
+            <div class="brand-icon">🛡️</div>
+            <div class="brand-title">
+                <h1>AI SMART MANHOLE SAFETY SYSTEM</h1>
+                <div class="brand-sub">Autonomous IoT Telemetry &bull; DNN Risk Prediction &bull; Generative Safety AI</div>
+            </div>
+        </div>
+
+        <div class="header-status-panel">
+            <div class="asset-badge">
+                <span class="pulse-dot"></span>
+                <span>ASSET: <strong style="color: #93c5fd;">{{ manhole.id }}</strong></span>
+            </div>
+
+            <div class="system-clock" id="systemClock">00:00:00</div>
+
+            <button class="icon-btn active" id="btnAudioToggle" title="Toggle Acoustic Warning Alarm">
+                🔊 <span>Audio: On</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Emergency Flashing Banner -->
+    <div class="emergency-banner" id="emergencyBanner">
+        <span id="emergencyBannerText">🚨 CRITICAL HAZARD DETECTED IN MANHOLE MH-001 - EVACUATE SURFACE PERIMETER</span>
+    </div>
+
+    <!-- Main Content Block -->
+    <main class="main-wrapper">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Audio Alerts Script -->
+    <script src="{{ url_for('static', filename='js/audio_alerts.js') }}"></script>
+    <!-- Charts Integration -->
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <!-- Main Dashboard Controller -->
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

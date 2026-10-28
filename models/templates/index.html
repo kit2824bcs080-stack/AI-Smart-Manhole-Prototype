@@ -1,0 +1,501 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 1. Control Toolbar -->
+<section class="control-toolbar">
+    <div class="toolbar-left">
+        <button class="btn btn-success" id="btnSimulate">
+            ⚡ <span>Simulate Sensor Data</span>
+        </button>
+
+        <div class="scenario-select-wrap">
+            <label for="scenarioSelect">Scenario:</label>
+            <select id="scenarioSelect" class="custom-select">
+                <option value="normal">Normal Nominal Flow</option>
+                <option value="gas_leak">Toxic Gas Buildup (H₂S Surge)</option>
+                <option value="flood">Stormwater Flash Flood (90%+ Fill)</option>
+                <option value="hazardous">Combined Crisis (Gas + Flood + Heat)</option>
+                <option value="warning_gas">Elevated Gas (Cautionary)</option>
+                <option value="warning_water">Rising Water (Cautionary)</option>
+                <option value="random">Continuous Random Walk</option>
+            </select>
+        </div>
+
+        <button class="btn btn-secondary" id="btnManualModal" title="Inject custom sensor numbers">
+            🎛️ <span>Manual Injection</span>
+        </button>
+    </div>
+
+    <div class="toolbar-right">
+        <!-- Auto-Polling Toggle -->
+        <div class="toggle-wrap">
+            <span class="toggle-label" id="pollStatusText">Auto-Polling: OFF</span>
+            <label class="switch">
+                <input type="checkbox" id="autoPollToggle">
+                <span class="slider"></span>
+            </label>
+        </div>
+
+        <button class="btn btn-ai-analyze" id="btnAnalyze">
+            🧠 <span>Analyze Safety</span>
+        </button>
+
+        <button class="btn btn-secondary" id="btnOpenReport">
+            📄 <span>Incident Report</span>
+        </button>
+    </div>
+</section>
+
+<!-- 2. Real-Time Telemetry Cards Grid -->
+<section class="telemetry-grid">
+    <!-- Toxic Gas Card -->
+    <div class="telemetry-card card-gas">
+        <div class="card-header">
+            <span class="card-title">Toxic Gas Level (H₂S / CH₄)</span>
+            <span class="card-badge">OSHA PEL: 20 PPM</span>
+        </div>
+        <div class="telemetry-value-display">
+            <span class="large-value" id="valGas">{{ latest_reading.gas_ppm if latest_reading else '4.2' }}</span>
+            <span class="unit-label">PPM</span>
+            <span class="rate-of-change rate-flat" id="deltaGas">◆ 0.0 PPM</span>
+        </div>
+        <div class="meter-track">
+            <div class="meter-fill fill-gas" id="barGas" style="width: {{ (latest_reading.gas_ppm if latest_reading else 4.2) }}%;"></div>
+        </div>
+        <div class="card-footer-info">
+            <span>Threshold: &gt; 50 PPM Critical</span>
+            <span>Sensor: Electrochemical</span>
+        </div>
+    </div>
+
+    <!-- Water Level Card -->
+    <div class="telemetry-card card-water">
+        <div class="card-header">
+            <span class="card-title">Water Level / Pipe Fill</span>
+            <span class="card-badge" id="valWaterDepth">{{ (latest_reading.water_level_pct * 3.8)|round(0) if latest_reading else '68' }} cm</span>
+        </div>
+        <div class="telemetry-value-display">
+            <span class="large-value" id="valWater">{{ latest_reading.water_level_pct if latest_reading else '18.0' }}</span>
+            <span class="unit-label">%</span>
+            <span class="rate-of-change rate-flat" id="deltaWater">◆ 0.0 %</span>
+        </div>
+        <div class="meter-track">
+            <div class="meter-fill fill-water" id="barWater" style="width: {{ latest_reading.water_level_pct if latest_reading else 18.0 }}%;"></div>
+        </div>
+        <div class="card-footer-info">
+            <span>Threshold: &gt; 75% Surcharge</span>
+            <span>Sensor: Ultrasonic Sonar</span>
+        </div>
+    </div>
+
+    <!-- Temperature Card -->
+    <div class="telemetry-card card-temp">
+        <div class="card-header">
+            <span class="card-title">Chamber Temperature</span>
+            <span class="card-badge">Range: 10-65°C</span>
+        </div>
+        <div class="telemetry-value-display">
+            <span class="large-value" id="valTemp">{{ latest_reading.temperature_c if latest_reading else '23.5' }}</span>
+            <span class="unit-label">°C</span>
+        </div>
+        <div class="meter-track">
+            <div class="meter-fill fill-temp" id="barTemp" style="width: {{ ((latest_reading.temperature_c if latest_reading else 23.5) / 50 * 100)|round }}%;"></div>
+        </div>
+        <div class="card-footer-info">
+            <span>Threshold: &gt; 45°C Thermal Surge</span>
+            <span>Sensor: RTD Pt100</span>
+        </div>
+    </div>
+
+    <!-- Humidity Card -->
+    <div class="telemetry-card card-humidity">
+        <div class="card-header">
+            <span class="card-title">Relative Humidity</span>
+            <span class="card-badge">Vapor Index</span>
+        </div>
+        <div class="telemetry-value-display">
+            <span class="large-value" id="valHumidity">{{ latest_reading.humidity_pct if latest_reading else '65.0' }}</span>
+            <span class="unit-label">% RH</span>
+        </div>
+        <div class="meter-track">
+            <div class="meter-fill fill-humidity" id="barHumidity" style="width: {{ latest_reading.humidity_pct if latest_reading else 65.0 }}%;"></div>
+        </div>
+        <div class="card-footer-info">
+            <span>Threshold: &gt; 90% Vapor Trap</span>
+            <span>Sensor: Capacitive RH</span>
+        </div>
+    </div>
+</section>
+
+<!-- 3. AI & DNN Risk Intelligence Section -->
+<section class="intelligence-grid">
+    <!-- Left: DNN Classification & GenAI Explanation -->
+    <div class="intel-panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i>⚡</i> <span>DNN Risk Classification & Diagnostics</span>
+            </div>
+            <span class="card-badge" style="background: rgba(139, 92, 246, 0.15); color: #c4b5fd;">
+                Offline Neural Model
+            </span>
+        </div>
+
+        <!-- Risk State & Confidence -->
+        <div class="risk-status-container">
+            <div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.25rem;">Predicted Risk Level</div>
+                <div class="risk-badge risk-{{ latest_assessment.risk_level.lower() if latest_assessment else 'safe' }}" id="riskBadge">
+                    <span class="pulse-dot"></span>
+                    <span>{{ latest_assessment.risk_level if latest_assessment else 'SAFE' }}</span>
+                </div>
+            </div>
+
+            <div class="dnn-confidence-box">
+                <div class="confidence-val" id="confidenceVal">
+                    {{ ((latest_assessment.confidence * 100)|round(1)) if latest_assessment else '99.4' }}%
+                </div>
+                <div class="confidence-lbl">DNN Confidence</div>
+            </div>
+        </div>
+
+        <!-- DNN Probability Bars -->
+        <div class="dnn-bars-container">
+            <div class="dnn-bar-row">
+                <span>SAFE</span>
+                <div class="dnn-bar-track">
+                    <div class="dnn-bar-fill fill-prob-safe" id="barProbSafe" style="width: {{ ((latest_assessment.prob_safe * 100)|round(1)) if latest_assessment else '99.4' }}%;"></div>
+                </div>
+                <span id="txtProbSafe">{{ ((latest_assessment.prob_safe * 100)|round(1)) if latest_assessment else '99.4' }}%</span>
+            </div>
+
+            <div class="dnn-bar-row">
+                <span>WARNING</span>
+                <div class="dnn-bar-track">
+                    <div class="dnn-bar-fill fill-prob-warn" id="barProbWarn" style="width: {{ ((latest_assessment.prob_warning * 100)|round(1)) if latest_assessment else '0.5' }}%;"></div>
+                </div>
+                <span id="txtProbWarn">{{ ((latest_assessment.prob_warning * 100)|round(1)) if latest_assessment else '0.5' }}%</span>
+            </div>
+
+            <div class="dnn-bar-row">
+                <span>CRITICAL</span>
+                <div class="dnn-bar-track">
+                    <div class="dnn-bar-fill fill-prob-crit" id="barProbCrit" style="width: {{ ((latest_assessment.prob_critical * 100)|round(1)) if latest_assessment else '0.1' }}%;"></div>
+                </div>
+                <span id="txtProbCrit">{{ ((latest_assessment.prob_critical * 100)|round(1)) if latest_assessment else '0.1' }}%</span>
+            </div>
+        </div>
+
+        <!-- GenAI Diagnostic Narrative -->
+        <div class="ai-narrative-box">
+            <div class="ai-narrative-header">
+                <span>🤖 Generative AI Situational Diagnosis</span>
+            </div>
+            <h4 id="aiHeadline" style="font-size: 0.95rem; font-weight: 700; color: #f9fafb;">
+                {{ latest_assessment.genai_explanation.split(':')[0] if latest_assessment else 'ALL SYSTEMS SAFE - MH-001' }}
+            </h4>
+            <p class="ai-narrative-text" id="aiExplanation">
+                {{ latest_assessment.genai_explanation if latest_assessment else 'Environment is operating well within nominal wastewater safety thresholds. Gas concentration is safe, and hydraulic conduits are unobstructed.' }}
+            </p>
+            <div class="ai-meta-pills">
+                <span class="meta-pill" id="oshaTag">COMPLIANT: OSHA 29 CFR 1910.146</span>
+                <span class="meta-pill" id="evacRadiusTag">Perimeter: Nominal</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Recommended Safety Actions & PPE Requirements -->
+    <div class="intel-panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <i>📋</i> <span>Tactical Safety Protocols & Action Items</span>
+            </div>
+            <span class="card-badge">OSHA Compliance Standard</span>
+        </div>
+
+        <div style="font-size: 0.8rem; color: var(--text-muted);">
+            Immediate operational checklists generated for dispatchers, municipal field crews, and safety supervisors:
+        </div>
+
+        <div class="actions-checklist" id="actionsChecklist">
+            {% if latest_assessment and latest_assessment.genai_recommendations %}
+                {% for action in latest_assessment.genai_recommendations %}
+                    <label class="action-item">
+                        <input type="checkbox" class="action-checkbox" id="chk_{{ loop.index0 }}">
+                        <span>{{ action }}</span>
+                    </label>
+                {% endfor %}
+            {% else %}
+                <label class="action-item">
+                    <input type="checkbox" class="action-checkbox" id="chk_0">
+                    <span>Routine monitoring: Maintain standard telemetry polling intervals.</span>
+                </label>
+                <label class="action-item">
+                    <input type="checkbox" class="action-checkbox" id="chk_1">
+                    <span>Standard confined space entry protocols apply (pre-entry 4-gas atmospheric testing mandatory).</span>
+                </label>
+                <label class="action-item">
+                    <input type="checkbox" class="action-checkbox" id="chk_2">
+                    <span>Next scheduled preventative inspection remains on calendar.</span>
+                </label>
+            {% endif %}
+        </div>
+
+        <div style="margin-top: auto; border-top: 1px solid var(--border-color); padding-top: 0.85rem;">
+            <div style="font-size: 0.78rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin-bottom: 0.4rem;">
+                Mandated Personal Protective Equipment (PPE)
+            </div>
+            <div class="ppe-tag-cloud" id="ppeContainer">
+                {% if latest_assessment and latest_assessment.ppe_requirements %}
+                    {% for ppe in latest_assessment.ppe_requirements %}
+                        <span class="ppe-tag">{{ ppe }}</span>
+                    {% endfor %}
+                {% else %}
+                    <span class="ppe-tag">Standard Hard Hat & Safety Glasses</span>
+                    <span class="ppe-tag">Hi-Vis Class 2 Workwear</span>
+                    <span class="ppe-tag">Steel-Toe Puncture-Resistant Boots</span>
+                    <span class="ppe-tag">Personal Clip-On Gas Badge</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- 4. Sensor Telemetry Trends Chart (Chart.js) -->
+<section class="chart-card">
+    <div class="chart-header">
+        <div class="chart-title">
+            📊 Multi-Axis Real-Time Sensor Telemetry Trends (MH-001)
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono);">
+            Continuous Time-Series Telemetry &bull; Gas / Water / Temp / Humidity
+        </div>
+    </div>
+    <div class="chart-container">
+        <canvas id="telemetryChartCanvas"></canvas>
+    </div>
+</section>
+
+<!-- 5. Monitoring History Table -->
+<section class="history-card">
+    <div class="card-header">
+        <div class="card-title">
+            📜 Telemetry Monitoring & Risk Classification History
+        </div>
+        <button class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.35rem 0.75rem;" onclick="location.reload();">
+            🔄 Refresh History
+        </button>
+    </div>
+
+    <div class="table-responsive">
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Manhole ID</th>
+                    <th>Gas (PPM)</th>
+                    <th>Water Level (% / cm)</th>
+                    <th>Chamber Temp</th>
+                    <th>Humidity</th>
+                    <th>Risk Prediction</th>
+                </tr>
+            </thead>
+            <tbody id="historyTableBody">
+                <!-- Rows dynamically prepended via dashboard.js -->
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- 6. Printable Incident Report Modal Dialog -->
+<div class="modal-overlay" id="reportModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <div class="modal-title">
+                <span>🚨 Official Municipal Sewer Incident Report</span>
+            </div>
+            <button class="close-btn" id="btnCloseModal">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <div class="report-document" id="printableReport">
+                <div class="report-header">
+                    <div>
+                        <div class="report-org">MUNICIPAL DRAINAGE & SEWER SAFETY COMMISSION</div>
+                        <div class="report-title-text" id="repTitle">Confined Space Hazard Incident Report</div>
+                    </div>
+                    <div class="report-meta-box">
+                        <div>Incident ID: <span class="report-id" id="repId">INC-MH-001-PENDING</span></div>
+                        <div>Timestamp: <span id="repTime">2026-09-25 00:00:00</span></div>
+                    </div>
+                </div>
+
+                <div class="report-grid-two">
+                    <div class="report-section-box">
+                        <div class="report-section-title">Asset & Infrastructure Location</div>
+                        <div class="report-detail-list">
+                            <span class="report-label">Manhole Asset:</span>
+                            <span class="report-value"><strong>MH-001</strong></span>
+
+                            <span class="report-label">Location:</span>
+                            <span class="report-value" id="repLocation">District 4 - Junction 12B</span>
+
+                            <span class="report-label">Catchment Zone:</span>
+                            <span class="report-value" id="repCatchment">Commercial & Stormwater Interceptor</span>
+
+                            <span class="report-label">Conduit Depth:</span>
+                            <span class="report-value">3.8 Meters (380 cm)</span>
+                        </div>
+                    </div>
+
+                    <div class="report-section-box">
+                        <div class="report-section-title">Safety Classification</div>
+                        <div class="report-detail-list">
+                            <span class="report-label">Evaluated Severity:</span>
+                            <span class="report-value"><span id="repSeverity" class="report-badge-danger">CRITICAL</span></span>
+
+                            <span class="report-label">Regulatory Standard:</span>
+                            <span class="report-value">OSHA 29 CFR 1910.146</span>
+
+                            <span class="report-label">Response Level:</span>
+                            <span class="report-value">Level A HAZMAT Dispatch</span>
+
+                            <span class="report-label">Incident Status:</span>
+                            <span class="report-value"><strong>ACTIVE / OPEN</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="report-section-title">Recorded Peak Environmental Telemetry</div>
+                <table class="report-table">
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Recorded Peak</th>
+                            <th>OSHA / Standard Threshold</th>
+                            <th>Status Condition</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Toxic Gas (H₂S / CH₄)</strong></td>
+                            <td id="repGas">74.5 PPM</td>
+                            <td>OSHA PEL: 20 PPM (IDLH: 100 PPM)</td>
+                            <td><span class="report-badge-danger">CRITICAL EXPOSURE</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Water Fill Level</strong></td>
+                            <td id="repWater">84.2% (320 cm)</td>
+                            <td>Max Safe: 40% (Overflow: 75%)</td>
+                            <td><span class="report-badge-danger">SURCHARGE OVERFLOW</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Chamber Temperature</strong></td>
+                            <td id="repTemp">34.8°C</td>
+                            <td>Nominal: 18 - 35°C</td>
+                            <td><span class="report-badge-warning">ELEVATED</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="report-section-title">AI Root Cause & Diagnostic Summary</div>
+                    <div class="report-narrative" id="repRootCause">
+                        Evaluating environmental telemetry...
+                    </div>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <div class="report-section-title">Mandated Emergency Responder Checklist</div>
+                    <ul class="report-checklist" id="repActionsList">
+                        <!-- Populated by JS -->
+                    </ul>
+                </div>
+
+                <div class="report-signoff">
+                    <div>
+                        <div class="signoff-line"></div>
+                        <div>Safety Incident Commander (Sign & Date)</div>
+                    </div>
+                    <div>
+                        <div class="signoff-line"></div>
+                        <div>Municipal Dispatch Supervisor (Sign & Date)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="document.getElementById('reportModal').classList.remove('active')">
+                Close
+            </button>
+            <button class="btn btn-primary" id="btnPrintReport">
+                🖨️ <span>Print / Export PDF</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 7. Manual Sensor Value Injection Modal -->
+<div class="modal-overlay" id="manualModal">
+    <div class="modal-card" style="max-width: 520px;">
+        <div class="modal-header">
+            <div class="modal-title">
+                <span>🎛️ Custom Sensor Parameter Injection</span>
+            </div>
+            <button class="close-btn" id="btnCloseManualModal">&times;</button>
+        </div>
+        <form id="formManual">
+            <div class="modal-body" style="gap: 1rem;">
+                <p style="font-size: 0.85rem; color: var(--text-muted);">
+                    Adjust the sliders below to inject precise simulated values and test DNN risk boundaries:
+                </p>
+
+                <div>
+                    <label style="font-size: 0.82rem; font-weight: 600; display: flex; justify-content: space-between;">
+                        <span>Toxic Gas (H₂S / CH₄)</span>
+                        <span id="lblGas" style="color: #f87171; font-family: var(--font-mono);">25.0 PPM</span>
+                    </label>
+                    <input type="range" id="manualGas" min="0" max="150" step="0.5" value="25.0" style="width: 100%;"
+                           oninput="document.getElementById('lblGas').textContent = this.value + ' PPM'">
+                </div>
+
+                <div>
+                    <label style="font-size: 0.82rem; font-weight: 600; display: flex; justify-content: space-between;">
+                        <span>Water Level (%)</span>
+                        <span id="lblWater" style="color: #06b6d4; font-family: var(--font-mono);">45.0 %</span>
+                    </label>
+                    <input type="range" id="manualWater" min="0" max="100" step="0.5" value="45.0" style="width: 100%;"
+                           oninput="document.getElementById('lblWater').textContent = this.value + ' %'">
+                </div>
+
+                <div>
+                    <label style="font-size: 0.82rem; font-weight: 600; display: flex; justify-content: space-between;">
+                        <span>Temperature (°C)</span>
+                        <span id="lblTemp" style="color: #f59e0b; font-family: var(--font-mono);">28.0 °C</span>
+                    </label>
+                    <input type="range" id="manualTemp" min="10" max="60" step="0.5" value="28.0" style="width: 100%;"
+                           oninput="document.getElementById('lblTemp').textContent = this.value + ' °C'">
+                </div>
+
+                <div>
+                    <label style="font-size: 0.82rem; font-weight: 600; display: flex; justify-content: space-between;">
+                        <span>Humidity (% RH)</span>
+                        <span id="lblHumidity" style="color: #10b981; font-family: var(--font-mono);">75.0 %</span>
+                    </label>
+                    <input type="range" id="manualHumidity" min="30" max="100" step="0.5" value="75.0" style="width: 100%;"
+                           oninput="document.getElementById('lblHumidity').textContent = this.value + ' %'">
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('manualModal').classList.remove('active')">
+                    Cancel
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    ⚡ Inject Telemetry
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
